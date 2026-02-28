@@ -1,0 +1,30 @@
+version: '3.9'
+
+services:
+  # Main application service
+  ai-qa-agent:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ai-qa-faang-agent-${CI_BUILD_NUMBER:-local}
+    environment:
+      JAVA_OPTS: "-Xms256m -Xmx512m"
+      LOG_LEVEL: "INFO"
+    volumes:
+      - ./target:/app/target
+      - ./src:/app/src
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD", "java", "-version"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - ci-network
+    restart: unless-stopped
+
+networks:
+  ci-network:
+    driver: bridge

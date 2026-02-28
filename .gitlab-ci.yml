@@ -1,0 +1,182 @@
+stages:
+  - build
+  - test
+  - report
+  - docker
+  - deploy
+
+# Define variables
+variables:
+  MAVEN_CLI_OPTS: "-q -Dorg.slf4j.simpleLogger.defaultLogLevel=warn"
+  DOCKER_DRIVER: overlay2
+  DOCKER_TLS_CERTDIR: ""
+  REGISTRY: docker.io
+  IMAGE_NAME: nikkks2000/ai-qa-faang-agent
+
+# Cache Maven dependencies
+cache:
+  paths:
+    - .m2/repository
+
+# Build stage
+build:compile:
+  stage: build
+  image: maven:3.9.6-eclipse-temurin-21
+  script:
+    - mvn clean compile $MAVEN_CLI_OPTS
+  artifacts:
+    paths:
+      - target/classes
+    expire_in: 1 day
+  only:
+    - merge_requests
+    - master
+    - develop
+
+# Test stage
+test:unit:
+  stage: test
+  image: maven:3.9.6-eclipse-temurin-21
+  script:
+    - mvn test $MAVEN_CLI_OPTS -Dallure.link.type.issue.pattern=https://gitlab.com/$CI_PROJECT_NAMESPACE/$CI_PROJECT_NAME/issues/%s
+  artifacts:
+    paths:
+      - target/surefire-reports
+      - target/allure-results
+    reports:
+      junit: target/surefire-reports/TEST-*.xml
+    expire_in: 30 days
+  only:
+    - merge_requests
+    - master
+    - develop
+
+# Code coverage
+test:coverage:
+  stage: test
+  image: maven:3.9.6-eclipse-temurin-21
+  script:
+    - mvn clean verify -Djacoco.skip=false $MAVEN_CLI_OPTS -DskipTests
+  coverage: '/Coverage: [0-9.]+%/'
+  artifacts:
+    paths:
+      - target/site/jacoco
+    expire_in: 30 days
+  only:
+    - master
+    - develop
+
+# Generate Allure report
+report:allure:
+  stage: report
+  image: maven:3.9.6-eclipse-temurin-21
+  script:
+    - mvn allure:report $MAVEN_CLI_OPTS
+  artifacts:
+    paths:
+      - target/allure-report
+    expire_in: 30 days
+  when: always
+  only:
+    - master
+    - develop
+
+# Security scanning
+security:owasp:
+  stage: test
+  image: maven:3.9.6-eclipse-temurin-21
+  script:
+    - mvn org.owasp:dependency-check-maven:check $MAVEN_CLI_OPTS
+  artifacts:
+    paths:
+      - target/dependency-check-report.html
+    expire_in: 30 days
+  allow_failure: true
+  only:
+    - master
+    - develop
+
+# Docker build and push (only on master)
+docker:build:
+  stage: docker
+  image: docker:latest
+  services:
+    - docker:dind
+  before_script:
+    - docker login -u $DOCKER_USERNAME -p $DOCKER_PASSWORD $REGISTRY
+  script:
+    - export BUILD_TAG="${CI_COMMIT_SHA:0:7}-${CI_PIPELINE_ID}"
+    - docker build -t $IMAGE_NAME:$BUILD_TAG -t $IMAGE_NAME:dev .
+    - docker push $IMAGE_NAME:$BUILD_TAG
+    - docker push $IMAGE_NAME:dev
+  after_script:
+    - docker logout $REGISTRY
+  only:
+    - master
+  when: manual
+
+docker:push-latest:
+  stage: docker
+  image: docker:latest
+  services:
+    - docker:dind
+  before_script:
+    - docker login -u $DOCKER_USERNAME -p $DOCKER_PASSWORD $REGISTRY
+  script:
+    - export BUILD_TAG="${CI_COMMIT_SHA:0:7}-${CI_PIPELINE_ID}"
+    - docker build -t $IMAGE_NAME:latest -t $IMAGE_NAME:stable .
+    - docker push $IMAGE_NAME:latest
+    - docker push $IMAGE_NAME:stable
+  after_script:
+    - docker logout $REGISTRY
+  only:
+    - master
+  when: manual
+
+# Deploy stage (Kubernetes example)
+deploy:test:
+  stage: deploy
+  image: bitnami/kubectl:latest
+  script:
+    - export BUILD_TAG="${CI_COMMIT_SHA:0:7}-${CI_PIPELINE_ID}"
+    - kubectl set image deployment/ai-qa-agent ai-qa-agent-container=$IMAGE_NAME:$BUILD_TAG --namespace=test
+    - kubectl rollout status deployment/ai-qa-agent --namespace=test
+  environment:
+    name: test
+    kubernetes:
+      namespace: test
+  only:
+    - develop
+  when: manual
+
+deploy:prod:
+  stage: deploy
+  image: bitnami/kubectl:latest
+  script:
+    - kubectl set image deployment/ai-qa-agent ai-qa-agent-container=$IMAGE_NAME:latest --namespace=production
+    - kubectl rollout status deployment/ai-qa-agent --namespace=production
+  environment:
+    name: production
+    kubernetes:
+      namespace: production
+  only:
+    - master
+  when: manual
+
+# Pages - publish reports
+pages:
+  stage: report
+  dependencies:
+    - report:allure
+    - test:coverage
+  script:
+    - mkdir -p public
+    - cp -r target/allure-report/* public/ || true
+    - mkdir -p public/coverage
+    - cp -r target/site/jacoco/* public/coverage/ || true
+  artifacts:
+    paths:
+      - public
+  only:
+    - master
+    - develop

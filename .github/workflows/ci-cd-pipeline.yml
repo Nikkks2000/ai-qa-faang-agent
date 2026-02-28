@@ -1,0 +1,171 @@
+name: 🚀 CI/CD Pipeline - Java 21
+
+on:
+  push:
+    branches: [master, main, develop]
+  pull_request:
+    branches: [master, main, develop]
+  schedule:
+    - cron: '0 2 * * *'  # Daily at 2 AM UTC
+
+jobs:
+  build-and-test:
+    name: 🏗️ Build & Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 🔧 Setup Java 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: maven
+
+      - name: 🔨 Compile source code
+        run: mvn clean compile -q -X
+
+      - name: 🧪 Run tests with Allure
+        run: |
+          mvn test -q \
+            -Dorg.slf4j.simpleLogger.defaultLogLevel=warn \
+            -Dallure.link.type.issue.pattern=https://github.com/${{ github.repository }}/issues/%s
+
+      - name: 📊 Generate Allure Report
+        if: always()
+        uses: simple-elf/allure-report-action@master
+        with:
+          allure_results: target/allure-results
+          allure_history: allure-history
+          keep_reports: 20
+
+      - name: 📤 Upload Allure Report to GitHub Pages
+        if: always()
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: allure-report
+
+      - name: 📈 Upload code coverage
+        if: always()
+        uses: codecov/codecov-action@v3
+        with:
+          files: ./target/site/jacoco/jacoco.xml
+          flags: unittests
+          name: codecov-umbrella
+
+  docker-build-push:
+    name: 🐳 Docker Build & Push
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    needs: build-and-test
+    timeout-minutes: 20
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🔐 Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: 🏗️ Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ secrets.DOCKER_USERNAME }}/ai-qa-faang-agent:latest
+            ${{ secrets.DOCKER_USERNAME }}/ai-qa-faang-agent:${{ github.run_number }}
+          build-args: |
+            BUILD_DATE=$(date -u +'%Y-%m-%dT%H:%M:%SZ')
+            VCS_REF=${{ github.sha }}
+            VERSION=${{ github.run_number }}
+          cache-from: type=registry,ref=${{ secrets.DOCKER_USERNAME }}/ai-qa-faang-agent:buildcache
+          cache-to: type=registry,ref=${{ secrets.DOCKER_USERNAME }}/ai-qa-faang-agent:buildcache,mode=max
+
+  security-scan:
+    name: 🔒 Security Scanning
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🔧 Setup Java 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: maven
+
+      - name: 🔍 Run OWASP Dependency Check
+        run: |
+          mvn org.owasp:dependency-check-maven:check -q
+        continue-on-error: true
+
+      - name: 📤 Upload OWASP Report
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: dependency-check-report
+          path: target/dependency-check-report.html
+
+  quality-gates:
+    name: 📊 Quality Gates
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🔧 Setup Java 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: maven
+
+      - name: 🧹 Run code quality checks
+        run: |
+          mvn clean verify \
+            -Dorg.slf4j.simpleLogger.defaultLogLevel=warn \
+            -DskipTests \
+            -DskipITs
+
+      - name: 📈 Code Coverage Analysis
+        run: mvn clean verify -Djacoco.skip=false -DskipTests -DskipITs
+
+      - name: 📤 Upload coverage reports
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: jacoco-coverage-report
+          path: target/site/jacoco/
+
+  notify-status:
+    name: 📢 Notify Status
+    runs-on: ubuntu-latest
+    if: always()
+    needs: [build-and-test, docker-build-push, security-scan, quality-gates]
+    timeout-minutes: 5
+
+    steps:
+      - name: 🟢 Pipeline Success
+        if: ${{ needs.build-and-test.result == 'success' && needs.docker-build-push.result != 'failure' }}
+        run: echo "✅ All checks passed!"
+
+      - name: 🔴 Pipeline Failure
+        if: ${{ needs.build-and-test.result == 'failure' }}
+        run: |
+          echo "❌ Build failed"
+          exit 1

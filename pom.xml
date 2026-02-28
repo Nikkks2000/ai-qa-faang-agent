@@ -1,36 +1,147 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 
+         http://maven.apache.org/xsd/maven-4.0.0.xsd">
 
-<project xmlns="http://maven.apache.org/POM/4.0.0">
-<modelVersion>4.0.0</modelVersion>
-<groupId>com.faang.ai</groupId>
-<artifactId>ai-agent</artifactId>
-<version>1.0</version>
+    <modelVersion>4.0.0</modelVersion>
 
-<dependencies>
+    <groupId>com.faang.ai</groupId>
+    <artifactId>ai-agent</artifactId>
+    <version>1.0</version>
+    <packaging>jar</packaging>
 
-<dependency>
-<groupId>io.rest-assured</groupId>
-<artifactId>rest-assured</artifactId>
-<version>5.4.0</version>
-</dependency>
+    <name>AI QA FAANG Agent</name>
+    <description>Enterprise AI-driven API Automation Framework</description>
 
-<dependency>
-<groupId>org.testng</groupId>
-<artifactId>testng</artifactId>
-<version>7.10.0</version>
-</dependency>
+    <!-- ================= PROPERTIES ================= -->
+    <properties>
+        <java.version>21</java.version>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <maven.compiler.source>${java.version}</maven.compiler.source>
+        <maven.compiler.target>${java.version}</maven.compiler.target>
 
-<dependency>
-<groupId>com.squareup.okhttp3</groupId>
-<artifactId>okhttp</artifactId>
-<version>4.12.0</version>
-</dependency>
+        <testng.version>7.10.0</testng.version>
+        <allure.version>2.24.0</allure.version>
+        <log4j.version>2.23.1</log4j.version>
+    </properties>
 
-<dependency>
-<groupId>org.json</groupId>
-<artifactId>json</artifactId>
-<version>20240303</version>
-</dependency>
+    <!-- ================= DEPENDENCIES ================= -->
+    <dependencies>
 
-</dependencies>
+        <!-- REST ASSURED -->
+        <dependency>
+            <groupId>io.rest-assured</groupId>
+            <artifactId>rest-assured</artifactId>
+            <version>5.4.0</version>
+        </dependency>
+
+        <!-- TESTNG -->
+        <dependency>
+            <groupId>org.testng</groupId>
+            <artifactId>testng</artifactId>
+            <version>${testng.version}</version>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- OKHTTP -->
+        <dependency>
+            <groupId>com.squareup.okhttp3</groupId>
+            <artifactId>okhttp</artifactId>
+            <version>4.12.0</version>
+        </dependency>
+
+        <!-- JSON -->
+        <dependency>
+            <groupId>org.json</groupId>
+            <artifactId>json</artifactId>
+            <version>20240303</version>
+        </dependency>
+
+        <!-- LOG4J2 -->
+        <dependency>
+            <groupId>org.apache.logging.log4j</groupId>
+            <artifactId>log4j-api</artifactId>
+            <version>${log4j.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.logging.log4j</groupId>
+            <artifactId>log4j-core</artifactId>
+            <version>${log4j.version}</version>
+        </dependency>
+
+        <!-- ALLURE TESTNG -->
+        <dependency>
+            <groupId>io.qameta.allure</groupId>
+            <artifactId>allure-testng</artifactId>
+            <version>${allure.version}</version>
+            <scope>test</scope>
+        </dependency>
+
+    </dependencies>
+
+    <!-- ================= BUILD ================= -->
+    <build>
+        <plugins>
+
+            <!-- COMPILER PLUGIN -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.11.0</version>
+                <configuration>
+                    <source>${java.version}</source>
+                    <target>${java.version}</target>
+                </configuration>
+            </plugin>
+
+            <!-- SUREFIRE (TESTNG RUNNER) -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <version>3.2.5</version>
+                <configuration>
+                    <suiteXmlFiles>
+                        <suiteXmlFile>testng.xml</suiteXmlFile>
+                    </suiteXmlFiles>
+                    <argLine>-Dfile.encoding=UTF-8</argLine>
+                    <reportFormat>plain</reportFormat>
+                    <reportFormat>xml</reportFormat>
+                    <listenerClasses>
+                        <listenerClass>io.qameta.allure.testng.AllureTestNg</listenerClass>
+                    </listenerClasses>
+                </configuration>
+            </plugin>
+
+            <!-- ALLURE MAVEN PLUGIN -->
+            <plugin>
+                <groupId>io.qameta.allure</groupId>
+                <artifactId>allure-maven</artifactId>
+                <version>2.12.0</version>
+            </plugin>
+
+            <!-- JACOCO CODE COVERAGE -->
+            <plugin>
+                <groupId>org.jacoco</groupId>
+                <artifactId>jacoco-maven-plugin</artifactId>
+                <version>0.8.11</version>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>prepare-agent</goal>
+                        </goals>
+                    </execution>
+                    <execution>
+                        <id>report</id>
+                        <phase>verify</phase>
+                        <goals>
+                            <goal>report</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+
+        </plugins>
+    </build>
 
 </project>

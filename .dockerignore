@@ -1,0 +1,16 @@
+target/
+.git/
+.gitignore
+.github/
+README.md
+Jenkinsfile
+docker-compose.yml
+.dockerignore
+.idea/
+*.iml
+*.iws
+*.ipr
+.DS_Store
+node_modules/
+.vscode/
+*.log
